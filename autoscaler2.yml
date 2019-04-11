@@ -1,0 +1,114 @@
+resources:
+  - name: notifications-paas-autoscaler-git
+    type: git
+    source:
+      uri: https://github.com/alphagov/notifications-paas-autoscaler.git
+
+jobs:
+  - name: build-autoscaler
+    plan:
+      - get: notifications-paas-autoscaler-git
+        trigger: true
+
+      - task: run-tests
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: python
+              tag: 3.6
+          inputs:
+            - name: notifications-paas-autoscaler-git
+          run:
+            path: /bin/bash
+            dir: notifications-paas-autoscaler-git
+            args:
+              - -euc
+              - |
+                  pip install -r dev_requirements.txt
+                  make test
+
+  - name: deploy-preview
+    plan:
+      - get: notifications-paas-autoscaler-git
+        passed: [build-autoscaler]
+        trigger: false
+
+      - task: generate-manifest
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: python
+              tag: 3.6
+          inputs:
+            - name: notifications-paas-autoscaler-git
+          run:
+            path: /bin/bash
+            dir: notifications-paas-autoscaler-git
+            args:
+              - -euc
+              - |
+                  make preview
+                  echo "Deploying to preview"
+                  sleep 15
+                  echo "Deployed to preview"
+                  cat data.yml
+
+  - name: deploy-staging
+    plan:
+      - get: notifications-paas-autoscaler-git
+        passed: [deploy-preview]
+        trigger: false
+
+      - task: generate-manifest
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: python
+              tag: 3.6
+          inputs:
+            - name: notifications-paas-autoscaler-git
+          run:
+            path: /bin/bash
+            dir: notifications-paas-autoscaler-git
+            args:
+              - -euc
+              - |
+                  make staging
+                  echo "Deploying to staging"
+                  sleep 15
+                  echo "Deployed to staging"
+                  cat data.yml
+
+  - name: deploy-production
+    plan:
+      - get: notifications-paas-autoscaler-git
+        passed: [deploy-staging]
+        trigger: false
+
+      - task: generate-manifest
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: python
+              tag: 3.6
+          inputs:
+            - name: notifications-paas-autoscaler-git
+          run:
+            path: /bin/bash
+            dir: notifications-paas-autoscaler-git
+            args:
+              - -euc
+              - |
+                  make production
+                  echo "Deploying to production"
+                  sleep 15
+                  echo "Deployed to production"
+                  cat data.yml
